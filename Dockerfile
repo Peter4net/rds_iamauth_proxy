@@ -14,7 +14,7 @@ COPY . .
 RUN cargo build --release --target "$(arch)-unknown-linux-musl" --bin rds_proxy && \
     mv "target/$(arch)-unknown-linux-musl/release/rds_proxy" /rds_proxy
 
-FROM alpine:3.18.5 AS runtime
+FROM alpine:3.21 AS runtime
 RUN addgroup -S rdsproxy && adduser -S rdsproxy -G rdsproxy
 COPY --from=builder /rds_proxy /usr/local/bin/
 USER rdsproxy
