@@ -1,6 +1,6 @@
-rds-iamauth-proxy
-=================
+# rds-iamauth-proxy
 
+## Config Instructions
 `rds-proxy` lets you make use of IAM-based authentication to
 AWS RDS instances from tools that don't natively support
 that method of authentication.
@@ -15,6 +15,8 @@ of something like an SSH tunnel to a bastion host.
 See sample configs for a [direct connection](./sample.config.json)
  or via an [SSH Tunnel](./ssh-tunnel.config.json)
 
+## Install & Usage
+
 Installation: `cargo install rds_proxy`
 
 Usage: `rds_proxy -c <config file>`
@@ -24,6 +26,14 @@ The connection string passed to the tool making use of the proxy can
 include any relevant username that the backend RDS instance is expecting. The
 password field is ignored.
 
-#### Notes
+## Development
+
+To build the docker container locally,
+```sh
+docker build -t rds_proxy:test .
+```
+
+## Notes
 
 If installation fails with `error: failed to download zeroize v1.4.1` — please ensure `cargo` is up to date and try again.
+
