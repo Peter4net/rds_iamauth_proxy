@@ -1,0 +1,12 @@
+{
+  "rds_type": "mysql",
+  "endpoint": {
+    "hostname": "db.abcdef.us-east-1.rds.amazonaws.com",
+    "port": 3306
+  },
+  "region": "us-east-1",
+  "proxy_endpoint": {
+    "hostname": "localhost",
+    "port": 53306
+  }
+}

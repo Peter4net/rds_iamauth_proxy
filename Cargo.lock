@@ -1500,6 +1500,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "tokio",
+ "tokio-native-tls",
  "tokio-postgres",
  "tokio-stream",
  "tokio-util",

@@ -36,6 +36,14 @@ impl DbSpec {
         DbSpec { user, database }
     }
 
+    pub fn user(&self) -> &str {
+        &self.user
+    }
+
+    pub fn database(&self) -> &str {
+        &self.database
+    }
+
     fn startup_message(&self) -> Result<Bytes> {
         let mut params = vec![("client_encoding", "UTF8")];
         params.push(("user", self.user.as_str()));
@@ -58,14 +66,40 @@ impl Addr {
     }
 }
 
+fn default_rds_type() -> String {
+    "postgres".to_string()
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct BackendConfig {
+    #[serde(default = "default_rds_type")]
+    rds_type: String,
     endpoint: Addr,
     region: String,
     proxy_endpoint: Option<Addr>,
 }
 
 impl BackendConfig {
+    pub fn rds_type(&self) -> &str {
+        &self.rds_type
+    }
+
+    pub fn endpoint_hostname(&self) -> &str {
+        &self.endpoint.hostname
+    }
+
+    pub fn endpoint_port(&self) -> u16 {
+        self.endpoint.port
+    }
+
+    pub fn region(&self) -> &str {
+        &self.region
+    }
+
+    pub fn connect_str(&self) -> String {
+        self.connect_endpoint().connect_str()
+    }
+
     fn connect_endpoint(&self) -> &Addr {
         match self.proxy_endpoint {
             Some(ref proxy) => proxy,

@@ -25,6 +25,7 @@ use tracing::{debug, info};
 use tracing_subscriber::filter::EnvFilter;
 
 mod backend_config;
+mod mysql_backend;
 use backend_config::BackendConfig;
 use backend_config::DbSpec;
 
@@ -142,6 +143,10 @@ async fn handle_client(
     mut client: TcpStream,
     _addr: SocketAddr,
 ) -> Result<()> {
+    if config.rds_type() == "mysql" {
+        return mysql_backend::handle_mysql_client(config, client).await;
+    }
+
     let server = auth_backend(config, &mut client).await?;
 
     let (mut ri, mut wi) = client.split();
