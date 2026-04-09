@@ -171,15 +171,34 @@ fn build_err_packet(code: u16, state: &str, msg: &str) -> Vec<u8> {
     buf
 }
 
-/// Build the SSLRequest packet payload (exactly 32 bytes).
-fn build_ssl_request(server_caps: u32) -> Vec<u8> {
-    let client_caps = server_caps
+/// Compute the client capability flags to use for both SSLRequest and HandshakeResponse.
+/// They must be consistent — SSLRequest is the first 32 bytes of the HandshakeResponse.
+/// We only advertise capabilities we actually implement; blindly echoing all server caps
+/// would require sending data (e.g. connect_attrs) that we don't produce.
+fn compute_client_caps(server_caps: u32, has_db: bool) -> u32 {
+    let mut caps = CLIENT_LONG_PASSWORD
+        | CLIENT_FOUND_ROWS
+        | CLIENT_LONG_FLAG
         | CLIENT_PROTOCOL_41
         | CLIENT_SSL
         | CLIENT_SECURE_CONNECTION
-        | CLIENT_PLUGIN_AUTH
-        | CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA;
+        | CLIENT_PLUGIN_AUTH;
 
+    if has_db {
+        caps |= CLIENT_CONNECT_WITH_DB;
+    }
+
+    // Only advertise lenenc if the server supports it
+    if server_caps & CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA != 0 {
+        caps |= CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA;
+    }
+
+    // Only keep capabilities the server actually supports
+    caps & server_caps
+}
+
+/// Build the SSLRequest packet payload (exactly 32 bytes).
+fn build_ssl_request(client_caps: u32) -> Vec<u8> {
     let mut buf = Vec::with_capacity(32);
     buf.extend_from_slice(&client_caps.to_le_bytes());
     buf.extend_from_slice(&(16u32 << 20).to_le_bytes()); // max packet 16 MB
@@ -190,28 +209,13 @@ fn build_ssl_request(server_caps: u32) -> Vec<u8> {
 
 /// Build HandshakeResponse41 with mysql_clear_password plugin and IAM token.
 fn build_handshake_response(
-    server_caps: u32,
+    client_caps: u32,
     user: &str,
     password: &str,
     database: &str,
 ) -> Vec<u8> {
-    let use_lenenc = server_caps & CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA != 0;
+    let use_lenenc = client_caps & CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA != 0;
     let has_db = !database.is_empty();
-
-    let mut client_caps = server_caps
-        | CLIENT_PROTOCOL_41
-        | CLIENT_SSL
-        | CLIENT_SECURE_CONNECTION
-        | CLIENT_PLUGIN_AUTH;
-
-    if use_lenenc {
-        client_caps |= CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA;
-    }
-    if has_db {
-        client_caps |= CLIENT_CONNECT_WITH_DB;
-    } else {
-        client_caps &= !CLIENT_CONNECT_WITH_DB;
-    }
 
     let mut buf = Vec::with_capacity(256 + password.len());
 
@@ -382,8 +386,13 @@ async fn connect_backend(
         ));
     }
 
+    // Compute client caps once for consistency between SSLRequest and HandshakeResponse
+    let has_db = !db_spec.database().is_empty();
+    let client_caps = compute_client_caps(server_caps, has_db);
+    debug!("Server caps: 0x{:08x}, Client caps: 0x{:08x}", server_caps, client_caps);
+
     // Send SSLRequest (seq 1)
-    let ssl_req = build_ssl_request(server_caps);
+    let ssl_req = build_ssl_request(client_caps);
     write_packet(&mut stream, seq + 1, &ssl_req).await?;
 
     // MySQL: TLS handshake starts immediately after SSLRequest (no server response byte)
@@ -396,7 +405,7 @@ async fn connect_backend(
         .await?;
 
     // Send HandshakeResponse over TLS (seq 2)
-    let response = build_handshake_response(server_caps, db_spec.user(), &password, db_spec.database());
+    let response = build_handshake_response(client_caps, db_spec.user(), &password, db_spec.database());
     write_packet(&mut tls_stream, seq + 2, &response).await?;
 
     // Handle authentication result
